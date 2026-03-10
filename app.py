@@ -156,8 +156,44 @@ def generate_feedback_report(chat_history, area_name, scenario_name):
             "recommendation": "Ha ocurrido un error en la evaluación."
         }
 
+import requests
+from streamlit_lottie import st_lottie
+import time
+
+# Helper function to load Lottie animation
+def load_lottieurl(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
 # App UI & Styling
 st.set_page_config(page_title="RolPlay.ai v1.0", page_icon="🎭", layout="wide")
+
+# App State for Splash Screen
+if "app_loaded" not in st.session_state:
+    st.session_state["app_loaded"] = False
+
+if not st.session_state["app_loaded"]:
+    # Splash Screen Content
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("<h2 style='text-align: center; color: #2C3E50;'>Iniciando Simulador Inteligente...</h2>", unsafe_allow_html=True)
+        # Lottie Animation (Robot/Tech Theme)
+        lottie_url = "https://assets9.lottiefiles.com/packages/lf20_tno6cg2w.json"
+        lottie_json = load_lottieurl(lottie_url)
+        if lottie_json:
+            st_lottie(lottie_json, height=300, key="loading_robot")
+        else:
+            st.info("Cargando módulos de IA...")
+            
+    # Artificial Delay to show the splash screen
+    time.sleep(3.5)
+    st.session_state["app_loaded"] = True
+    st.rerun()
+
+# --- MAIN APP REGION (Only visible after loading) ---
 
 st.markdown("""
 <style>

@@ -3,3 +3,5 @@ google-genai
 python-dotenv
 pandas
 plotly
+requests
+streamlit-lottie
