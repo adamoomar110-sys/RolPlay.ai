@@ -1,4 +1,5 @@
-venv/
 .env
+rolplay_history.db
 __pycache__/
+*.pyc
 .DS_Store
