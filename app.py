@@ -1,6 +1,5 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+import ollama
 import os
 import json
 import urllib.parse
@@ -13,8 +12,8 @@ from datetime import datetime
 # Load env variables
 load_dotenv()
 
-# Initialize Google GenAI Client
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Initialize Ollama Model
+OLLAMA_MODEL = "gemma3:4b"
 
 # DB Init
 DB_NAME = "rolplay_history.db"
@@ -80,28 +79,23 @@ def generate_feedback_report(chat_history, area_name, scenario_name):
     Asegúrate de no incluir markdown circundante (como ```json), solo el objeto literal JSON.
     """
     
-    messages = [types.Content(role="user", parts=[types.Part.from_text(text=eval_prompt)])]
+    messages = [{"role": "user", "content": eval_prompt}]
     for msg in chat_history:
         if msg["role"] != "system":
-            role = "user" if msg["role"] == "user" else "model"
-            messages.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+            messages.append({"role": msg["role"], "content": msg["content"]})
             
-    response = None
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=messages,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-            )
+        response = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=messages,
+            format="json"
         )
-        data = json.loads(response.text)
+        data = json.loads(response['message']['content'])
         return data
     except Exception as e:
-        raw_response = getattr(response, 'text', 'N/A') if response else 'N/A'
         return {
             "score": 0,
-            "feedback": f"Error parseando la evaluación de la IA. Mensaje de error: {str(e)}\nRespuesta cruda: {raw_response}",
+            "feedback": f"Error parseando la evaluación de la IA. Mensaje de error: {str(e)}",
             "passed": False,
             "recommendation": "Ha ocurrido un error en la evaluación."
         }
@@ -373,32 +367,27 @@ if app_mode == "Simulador":
             with st.chat_message("user"):
                 st.markdown(prompt)
                 
-            gemini_messages = []
+            ollama_messages = []
             for msg in st.session_state["messages"]:
-                if msg["role"] == "system":
-                     continue
-                role = "user" if msg["role"] == "user" else "model"
-                gemini_messages.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+                ollama_messages.append({"role": msg["role"], "content": msg["content"]})
                 
             with st.chat_message("assistant"):
                 try:
-                    stream = client.models.generate_content_stream(
-                        model="gemini-2.5-flash",
-                        contents=gemini_messages,
-                        config=types.GenerateContentConfig(
-                            system_instruction=st.session_state["messages"][0]["content"],
-                        )
+                    stream = ollama.chat(
+                        model=OLLAMA_MODEL,
+                        messages=ollama_messages,
+                        stream=True,
                     )
                     
                     def generate():
                          for chunk in stream:
-                              if chunk.text:
-                                  yield chunk.text
+                              if 'message' in chunk and 'content' in chunk['message']:
+                                  yield chunk['message']['content']
                               
                     response = st.write_stream(generate())
                     st.session_state["messages"].append({"role": "assistant", "content": response})
                 except Exception as e:
-                    error_msg = "Lo siento, hubo un error con la Inteligencia Artificial (probablemente excedimos el límite de cuota gratuita momentáneamente). Por favor, espera un minuto o intenta de nuevo."
+                    error_msg = f"Lo siento, hubo un error con Ollama (asegúrate de que el servicio esté corriendo y el modelo '{OLLAMA_MODEL}' esté descargado). Error: {str(e)}"
                     st.error(error_msg)
                     # Quitar el mensaje del usuario para poder reintentar
                     st.session_state["messages"].pop()

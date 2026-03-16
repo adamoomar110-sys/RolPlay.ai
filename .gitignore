@@ -18,3 +18,7 @@ dist-ssr/
 # OS
 Thumbs.db
 Desktop.ini
+
+# Local DB and Tests
+*.db
+test_*.py
