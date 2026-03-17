@@ -73,6 +73,10 @@ init_db()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
+# Localhost often fails on Windows, 127.0.0.1 is safer
+if "localhost" in OLLAMA_HOST:
+    OLLAMA_HOST = OLLAMA_HOST.replace("localhost", "127.0.0.1")
+
 # Initialize Ollama client
 client = ollama.Client(host=OLLAMA_HOST)
 
@@ -111,8 +115,8 @@ with st.sidebar:
     if st.session_state["app_state"] == "simulator":
         st.divider()
         st.markdown("<h2 style='color: #818CF8;'>Configuración</h2>", unsafe_allow_html=True)
-        selected_area = st.selectbox("Área de Entrenamiento", list(SCENARIOS.keys()))
-        scenario_name = st.selectbox("Escenario", list(SCENARIOS[selected_area].keys()))
+        selected_area = st.selectbox("Área de Entrenamiento", list(SCENARIOS.keys()), key="area_select")
+        scenario_name = st.selectbox("Escenario", list(SCENARIOS[selected_area].keys()), key="scenario_select")
         scenario_data = SCENARIOS[selected_area][scenario_name]
         
         if st.button("🗑️ Reiniciar Chat"):
@@ -259,7 +263,8 @@ def chat_with_ai(messages, sys_prompt):
         )
         return response['message']['content']
     except Exception as e:
-        return f"❌ Error de Ollama: {str(e)}"
+        st.error(f"⚠️ Error de conexión con Ollama: {str(e)}")
+        return f"❌ Error de Ollama: No se pudo contactar con el modelo. Verifica que Ollama esté abierto."
 
 def evaluate_session(messages, area, scenario):
     user_name = st.session_state["user_profile"]["name"]
@@ -336,18 +341,18 @@ elif st.session_state["app_state"] == "simulator":
     st.markdown('<p class="main-header">🎭 RolPlay.ai</p>', unsafe_allow_html=True)
     
     # Check if a scenario is selected (Safeguard)
-    current_area = list(SCENARIOS.keys())[0] if "selected_area" not in locals() else selected_area
-    current_scenario = list(SCENARIOS[current_area].keys())[0] if "scenario_name" not in locals() else scenario_name
+    selected_area = st.session_state.get("area_select", list(SCENARIOS.keys())[0])
+    scenario_name = st.session_state.get("scenario_select", list(SCENARIOS[selected_area].keys())[0])
     
-    scenario_data = SCENARIOS[current_area][current_scenario]
+    scenario_data = SCENARIOS[selected_area][scenario_name]
     scenario_greeting = scenario_data["greeting"]
     user_name = st.session_state["user_profile"]["name"]
     company = st.session_state["user_profile"]["company"]
     
     # Session state init
-    if "messages" not in st.session_state or st.session_state.get("last_scenario") != current_scenario:
+    if "messages" not in st.session_state or st.session_state.get("last_scenario") != scenario_name:
         st.session_state["messages"] = [{"role": "assistant", "content": scenario_greeting.replace("[USER]", user_name)}]
-        st.session_state["last_scenario"] = current_scenario
+        st.session_state["last_scenario"] = scenario_name
         st.session_state["evaluation"] = None
 
     # Evaluation Display
@@ -393,6 +398,6 @@ elif st.session_state["app_state"] == "simulator":
             st.divider()
             if st.button("🏁 Finalizar y Evaluar Sesión", use_container_width=True):
                 with st.spinner("Generando evaluación experta..."):
-                    result = evaluate_session(st.session_state["messages"], current_area, current_scenario)
+                    result = evaluate_session(st.session_state["messages"], selected_area, scenario_name)
                     st.session_state["evaluation"] = result
                     st.rerun()
