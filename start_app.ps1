@@ -1,10 +1,9 @@
-$host.UI.RawUI.WindowTitle = "RolPlay.ai - Servidores"
-Write-Host "Iniciando Servidor API Backend..." -ForegroundColor Cyan
-Start-Process powershell.exe -ArgumentList "-NoExit -Command `"cd backend; uvicorn main:app --host 0.0.0.0 --port 8000`"" -WindowStyle Minimized
+$host.UI.RawUI.WindowTitle = "RolPlay.ai v1.0 - Iniciando"
+Write-Host "Iniciando RolPlay.ai v1.0 Monolitico..." -ForegroundColor Cyan
 
-Write-Host "Iniciando Interfaz React Frontend..." -ForegroundColor Cyan 
-Start-Process powershell.exe -ArgumentList "-NoExit -Command `"cd frontend; npm run dev`"" -WindowStyle Minimized
+# Directorio base
+$scriptDir = $PSScriptRoot
+if (-not $scriptDir) { $scriptDir = Get-Location }
 
-Write-Host "Iniciando navegador web..." -ForegroundColor Green
-Start-Sleep -Seconds 3
-Start-Process "http://localhost:5173"
+cd $scriptDir
+streamlit run app.py --server.port 8002 --browser.gatherUsageStats false

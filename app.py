@@ -1,475 +1,394 @@
 import streamlit as st
-import ollama
 import os
 import json
-import urllib.parse
-from dotenv import load_dotenv
-import streamlit.components.v1 as components
-import sqlite3
-import pandas as pd
+import base64
+import time
 from datetime import datetime
+from dotenv import load_dotenv
+import ollama
+import io
+import asyncio
+import edge_tts
+from streamlit_lottie import st_lottie
+import requests
+
+# Import scenarios
+from scenarios import SCENARIOS
+import sqlite3
 
 # Load env variables
 load_dotenv()
 
-# Initialize Ollama Model
-OLLAMA_MODEL = "gemma3:4b"
+DB_PATH = "rolplay_history.db"
 
-# DB Init
-DB_NAME = "rolplay_history.db"
+@st.cache_data
+def load_lottieurl(url):
+    try:
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
+        return None
+
+lottie_ai = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_49rdyysj.json")
 
 def init_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            user_name TEXT,
-            company_name TEXT,
-            area TEXT,
-            scenario TEXT,
-            score INTEGER,
-            passed BOOLEAN,
-            feedback TEXT,
-            recommendation TEXT
-        )
-    ''')
+    c.execute('''CREATE TABLE IF NOT EXISTS history_v2
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  timestamp TEXT,
+                  user_name TEXT,
+                  area TEXT,
+                  scenario TEXT,
+                  chat_history TEXT,
+                  score INTEGER,
+                  feedback TEXT)''')
     conn.commit()
     conn.close()
 
-def save_session(user_name, company_name, area, scenario, score, passed, feedback, recommendation):
-    conn = sqlite3.connect(DB_NAME)
+def save_session(user_name, area, scenario, messages, score, feedback):
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    c.execute('''
-        INSERT INTO sessions (timestamp, user_name, company_name, area, scenario, score, passed, feedback, recommendation)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (now, user_name, company_name, area, scenario, score, passed, feedback, recommendation))
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    c.execute("INSERT INTO history_v2 (timestamp, user_name, area, scenario, chat_history, score, feedback) VALUES (?, ?, ?, ?, ?, ?, ?)",
+              (timestamp, user_name, area, scenario, json.dumps(messages), score, feedback))
     conn.commit()
     conn.close()
 
-# Initialize DB
+def get_history():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute("SELECT * FROM history_v2 ORDER BY id DESC")
+        rows = c.fetchall()
+    except:
+        rows = []
+    conn.close()
+    return rows
+
 init_db()
 
-from scenarios import SCENARIOS, LEARNING_PATH
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
 
-def generate_feedback_report(chat_history, area_name, scenario_name):
-    # Sends the entire conversation to the LLM to get an evaluation of the agent
-    eval_prompt = f"""
-    A continuación verás una transcripción de una conversación de entrenamiento en habilidades blandas.
-    Contexto de la Simulación:
-    - Área: {area_name}
-    - Nivel y Escenario: {scenario_name}
+# --- MAIN APP REGION ---
+st.set_page_config(page_title="RolPlay.ai v1.1 Premium", page_icon="🎭", layout="wide")
 
-    Evalúa de manera experta el desempeño del empleado (quien actúa como 'user') para manejar al cliente/usuario que interpreta la IA (quien actúa como 'assistant'/'model').
-    Evalúa 3 áreas (del 1 al 10):
-    1. Empatía y Escucha Activa 
-    2. Resolución de Conflictos (o Negociación/Protocolo según aplique)
-    3. Profesionalismo bajo presión
+# App State for Entrance Portal
+if "app_state" not in st.session_state:
+    st.session_state["app_state"] = "portal" 
+
+if "user_profile" not in st.session_state:
+    st.session_state["user_profile"] = {"name": "Usuario", "company": "RolPlay Corp"}
+
+# --- SIDEBAR ---
+with st.sidebar:
+    st.markdown("<h1 style='color: #818CF8;'>🎭 Perfil</h1>", unsafe_allow_html=True)
+    st.session_state["user_profile"]["name"] = st.text_input("Tu Nombre", st.session_state["user_profile"]["name"])
+    st.session_state["user_profile"]["company"] = st.text_input("Empresa/Organización", st.session_state["user_profile"]["company"])
     
-    Proporciona un puntaje final de 0 a 100 y decide si el usuario aprueba (puntaje > 70).
-    Devuelve estrictamente un objeto JSON con la siguiente estructura:
-    {{
-        "score": 85,
-        "feedback": "Aquí el feedback estructurado sobre qué hizo bien y qué debe mejorar.",
-        "passed": true,
-        "recommendation": "Aquí tu recomendación de por qué debería avanzar al siguiente nivel o por qué debe reintentar."
-    }}
-    Asegúrate de no incluir markdown circundante (como ```json), solo el objeto literal JSON.
-    """
+    st.divider()
     
-    messages = [{"role": "user", "content": eval_prompt}]
-    for msg in chat_history:
-        if msg["role"] != "system":
-            messages.append({"role": msg["role"], "content": msg["content"]})
-            
-    try:
-        response = ollama.chat(
-            model=OLLAMA_MODEL,
-            messages=messages,
-            format="json"
-        )
-        data = json.loads(response['message']['content'])
-        return data
-    except Exception as e:
-        return {
-            "score": 0,
-            "feedback": f"Error parseando la evaluación de la IA. Mensaje de error: {str(e)}",
-            "passed": False,
-            "recommendation": "Ha ocurrido un error en la evaluación."
-        }
+    # Navigation logic with state check
+    curr_nav = ["Inicio", "Simulador", "Historial"]
+    idx = 0
+    if st.session_state["app_state"] == "simulator": idx = 1
+    elif st.session_state["app_state"] == "history": idx = 2
+    
+    nav = st.radio("Navegación", curr_nav, index=idx)
+    if nav == "Inicio":
+        st.session_state["app_state"] = "portal"
+    elif nav == "Simulador":
+        st.session_state["app_state"] = "simulator"
+    else:
+        st.session_state["app_state"] = "history"
 
-import requests
-from streamlit_lottie import st_lottie
-import time
+    if st.session_state["app_state"] == "simulator":
+        st.divider()
+        st.markdown("<h2 style='color: #818CF8;'>Configuración</h2>", unsafe_allow_html=True)
+        selected_area = st.selectbox("Área de Entrenamiento", list(SCENARIOS.keys()))
+        scenario_name = st.selectbox("Escenario", list(SCENARIOS[selected_area].keys()))
+        scenario_data = SCENARIOS[selected_area][scenario_name]
+        
+        if st.button("🗑️ Reiniciar Chat"):
+            st.session_state["messages"] = [{"role": "assistant", "content": scenario_data["greeting"]}]
+            st.session_state["evaluation"] = None
+            st.rerun()
 
-# Helper function to load Lottie animation
-def load_lottieurl(url: str):
-    r = requests.get(url)
-    if r.status_code != 200:
-        return None
-    return r.json()
-
-# App UI & Styling
-st.set_page_config(page_title="RolPlay.ai v1.0", page_icon="🎭", layout="wide")
-
-# App State for Splash Screen
-if "app_loaded" not in st.session_state:
-    st.session_state["app_loaded"] = False
-
-if not st.session_state["app_loaded"]:
-    # Splash Screen Content
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("<h2 style='text-align: center; color: #2C3E50;'>Iniciando Simulador Inteligente...</h2>", unsafe_allow_html=True)
-        # Lottie Animation (Robot/Tech Theme)
-        lottie_url = "https://assets9.lottiefiles.com/packages/lf20_tno6cg2w.json"
-        lottie_json = load_lottieurl(lottie_url)
-        if lottie_json:
-            st_lottie(lottie_json, height=300, key="loading_robot")
-        else:
-            st.info("Cargando módulos de IA...")
-            
-    # Artificial Delay to show the splash screen
-    time.sleep(3.5)
-    st.session_state["app_loaded"] = True
-    st.rerun()
-
-# --- MAIN APP REGION (Only visible after loading) ---
-
+# --- CSS PREMIUM ---
 st.markdown("""
 <style>
-    /* Estilos Pastel y Suaves para Streamlit */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
     .stApp {
-        background-color: #F8F9FA; /* Gris casi blanco muy suave */
+        background: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.05), transparent),
+                    radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.05), transparent),
+                    #0F172A;
+        color: #FFFFFF !important;
+        font-family: 'Inter', sans-serif;
     }
     
-    /* Variables de texto para menor contraste */
-    p, span, div, label {
-        color: #4A4A4A !important; /* Gris oscuro en lugar de negro puro */
-    }
-
-    h1, h2, h3 {
-        color: #2C3E50 !important; /* Azul oscuro mate para encabezados */
-    }
-
-    /* Mensajes del Chat */
-    .stChatMessage {
-        border-radius: 12px;
-        padding: 15px;
-        margin-bottom: 12px;
-        border: 1px solid #EAEAEA;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.02);
-    }
-    
-    /* Diferenciar usuario vs bot de manera sutil */
-    [data-testid="stChatMessage"]:nth-child(odd) {
-        background-color: #FFFFFF;
-    }
-    
-    [data-testid="stChatMessage"]:nth-child(even) {
-        background-color: #F1F4F9; /* Azul pastel muy pálido */
-    }
-
-    /* Título principal con gradiente pastel */
     .main-header {
-        background: linear-gradient(90deg, #FFB7B2 0%, #E2F0CB 50%, #B5EAD7 100%);
+        background: linear-gradient(135deg, #818CF8 0%, #C084FC 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 800;
-        font-size: 3rem;
-        margin-bottom: 0px;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.05); /* Sutil sombra para dar volumen pero sin contraste alto */
+        font-size: 3.5rem;
+        margin-bottom: -10px;
+        letter-spacing: -0.02em;
     }
     
-    /* Footer */
-    .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0px;
-        width: 100%;
-        background-color: #F8F9FA;
-        color: #A0A0A0; /* Gris muy claro para no molestar visualmente */
-        text-align: center;
-        padding: 8px;
-        font-size: 0.85rem;
-        z-index: 100;
-        border-top: 1px solid #EBEBEB;
+    /* Sidebar Fixes */
+    [data-testid="stSidebar"] {
+        background-color: rgba(15, 23, 42, 0.95) !important;
+        backdrop-filter: blur(15px);
+        border-right: 1px solid rgba(255,255,255,0.1);
+    }
+
+    [data-testid="stSidebar"] * {
+        color: #FFFFFF !important;
+    }
+
+    [data-testid="stSidebar"] .stTextInput input {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #FFFFFF !important;
     }
     
-    /* Botones primarios (adaptados a pastel) */
+    /* Chat Contrast */
+    .stChatMessage {
+        border-radius: 20px !important;
+        padding: 20px !important;
+        background-color: rgba(30, 41, 59, 0.8) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+        margin-bottom: 20px !important;
+    }
+
+    .stChatMessage [data-testid="stMarkdownContainer"] p {
+        color: #FFFFFF !important;
+        font-weight: 500;
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+    
     .stButton>button {
-        background-color: #B5EAD7 !important; /* Verde menta pastel */
-        color: #2C3E50 !important;
-        border: none !important;
-        border-radius: 8px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
         transition: all 0.3s ease !important;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2)) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: #FFFFFF !important;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
     
     .stButton>button:hover {
-        background-color: #A0D8C5 !important;
-        transform: translateY(-1px);
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.4)) !important;
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(99, 102, 241, 0.2);
     }
 
-    /* Panel lateral oscuro pastelizado */
-    [data-testid="stSidebar"] {
-        background-color: #E2F0CB !important; /* Verde manzana muy claro */
+    .portal-container {
+        background: rgba(30, 41, 59, 0.6);
+        backdrop-filter: blur(25px);
+        border-radius: 40px;
+        padding: 80px 40px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
+        margin: 40px auto;
+        max-width: 900px;
+        box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+    }
+    
+    .footer {
+        position: fixed;
+        bottom: 0px;
+        width: 100%;
+        text-align: center;
+        padding: 15px;
+        font-size: 0.8rem;
+        color: #94A3B8;
+        font-weight: 600;
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(5px);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Footer Injection
-st.markdown('<div class="footer">© Adamo v1.0 | RolPlay.ai</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer">© 2026 RolPlay.ai Premium | Inteligencia Local Gemma 3</div>', unsafe_allow_html=True)
 
-st.markdown('<p class="main-header">🎭 RolPlay.ai</p>', unsafe_allow_html=True)
-st.markdown("### Entrenador Interactivo de Habilidades Blandas")
+# --- CORE LOGIC ---
 
-st.sidebar.header("Menú Principal")
-app_mode = st.sidebar.radio("Navegación", ["Simulador", "Dashboard Analítico"])
+async def generate_edge_tts(text, voice="es-AR-TomasNeural"):
+    try:
+        communicate = edge_tts.Communicate(text, voice)
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
+        return audio_data
+    except:
+        return None
 
-if app_mode == "Simulador":
-    st.sidebar.markdown("---")
-    st.sidebar.header("Perfil de Usuario")
-    user_name = st.sidebar.text_input("Nombre / Estudiante", value=st.session_state.get("user_name", ""))
-    company_name = st.sidebar.text_input("Empresa / Institución", value=st.session_state.get("company_name", ""))
-    st.session_state["user_name"] = user_name
-    st.session_state["company_name"] = company_name
+def get_tts_html(text):
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        audio_bytes = loop.run_until_complete(generate_edge_tts(text))
+        if not audio_bytes: return ""
+        b64 = base64.b64encode(audio_bytes).decode()
+        return f"""
+            <audio autoplay="true">
+            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+            </audio>
+            """
+    except Exception as e:
+        return f"<!-- TTS Error: {e} -->"
 
-    st.sidebar.markdown("---")
-    mode = st.sidebar.radio("Modo de Juego", ["Curso Interactivo", "Práctica Libre"])
+def chat_with_ai(messages, sys_prompt):
+    try:
+        response = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=messages
+        )
+        return response['message']['content']
+    except Exception as e:
+        return f"❌ Error de Ollama: {str(e)}"
 
-    if "course_index" not in st.session_state:
-        st.session_state["course_index"] = 0
-    if "evaluation_result" not in st.session_state:
-        st.session_state["evaluation_result"] = None
-
-    if mode == "Curso Interactivo":
-        if st.session_state["course_index"] >= len(LEARNING_PATH):
-             st.success("¡Felicidades! Has completado el **Curso Interactivo** completo.")
-             if st.button("Reiniciar Curso"):
-                  st.session_state["course_index"] = 0
-                  st.session_state["evaluation_result"] = None
-                  st.session_state["current_scenario"] = None
-                  st.rerun()
-             st.stop()
-             
-        current_step = LEARNING_PATH[st.session_state["course_index"]]
-        selected_area = current_step["area"]
-        scenario_name = current_step["level"]
-        
-        st.sidebar.success(f"📈 Nivel {st.session_state['course_index'] + 1} de {len(LEARNING_PATH)}")
-        st.sidebar.markdown(f"**Área:** {selected_area}")
-        st.sidebar.markdown(f"**Desafío:** {scenario_name}")
-    else:
-        selected_area = st.sidebar.selectbox("Selecciona un Área", list(SCENARIOS.keys()))
-        scenario_name = st.sidebar.selectbox("Selecciona un Escenario / Nivel", list(SCENARIOS[selected_area].keys()))
-
-    scenario_data = SCENARIOS[selected_area][scenario_name]
-    sys_prompt = scenario_data["prompt"]
-    greeting_text = scenario_data["greeting"]
-
-    scenario_key = f"{selected_area}_{scenario_name}_{mode}"
-
-    if "messages" not in st.session_state or st.session_state.get("current_scenario") != scenario_key:
-        st.session_state["current_scenario"] = scenario_key
-        st.session_state["messages"] = [{"role": "system", "content": sys_prompt}]
-        st.session_state["messages"].append({"role": "assistant", "content": greeting_text})
-        st.session_state["evaluation_result"] = None
-
-    if st.session_state["evaluation_result"]:
-        result = st.session_state["evaluation_result"]
-        st.markdown("### 📊 Resultado de la Simulación")
-        
-        score = result.get("score", 0)
-        passed = result.get("passed", False)
-        
-        if passed:
-            st.success(f"**Puntaje:** {score}/100 - ¡Aprobado! ✅")
-        else:
-            st.error(f"**Puntaje:** {score}/100 - Reprobado ❌")
+def evaluate_session(messages, area, scenario):
+    user_name = st.session_state["user_profile"]["name"]
+    eval_prompt = f"""
+    Evalúa el desempeño del usuario '{user_name}' en esta simulación de '{area}' - '{scenario}'.
+    Puntaje de 0 a 100. Resultado JSON:
+    {{
+        "score": 85,
+        "feedback": "...",
+        "passed": true,
+        "recommendation": "..."
+    }}
+    Responde SOLO el JSON.
+    """
+    eval_messages = [{"role": "system", "content": eval_prompt}]
+    for m in messages:
+        if m["role"] != "system":
+            eval_messages.append(m)
             
-        st.info(f"**Recomendación:** {result.get('recommendation', '')}")
-        st.markdown("**Desglose de Feedback:**")
-        st.write(result.get("feedback", ""))
+    try:
+        response = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=eval_messages,
+            format="json"
+        )
+        result = json.loads(response['message']['content'])
+        save_session(user_name, area, scenario, messages, result["score"], result["feedback"])
+        return result
+    except Exception as e:
+        return {"score": 0, "feedback": f"Error evaluación: {e}", "passed": False, "recommendation": "Reintentar."}
+
+# --- UI LOGIC ---
+
+if st.session_state["app_state"] == "portal":
+    st.markdown("<p class='main-header' style='text-align: center;'>🎭 RolPlay.ai</p>", unsafe_allow_html=True)
+    
+    with st.container():
+        st.markdown("<div class='portal-container'>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if lottie_ai:
+                st_lottie(lottie_ai, height=350, key="portal_ai")
         
-        if mode == "Curso Interactivo":
-            if passed:
-                if st.button("Siguiente Nivel 🚀"):
-                    st.session_state["course_index"] += 1
-                    st.session_state["evaluation_result"] = None
-                    st.session_state["current_scenario"] = None
-                    st.rerun()
-            else:
-                if st.button("Reintentar Nivel 🔄"):
-                    st.session_state["evaluation_result"] = None
-                    st.session_state["current_scenario"] = None
-                    st.rerun()
-        else:
-            if st.button("Volver a Jugar 🔄"):
-                st.session_state["evaluation_result"] = None
-                st.session_state["current_scenario"] = None
+        st.markdown("<h1 style='font-size: 3.5rem; color: #FFFFFF;'>Simulador de Rol Premium</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 1.4rem; color: #CBD5E1; margin-bottom: 30px;'>Entrena tus habilidades con el cerebro de IA más avanzado del momento.</p>", unsafe_allow_html=True)
+        
+        col_b1, col_b2, col_b3 = st.columns([1, 1.5, 1])
+        with col_b2:
+            if st.button("🚀 COMENZAR ENTRENAMIENTO", use_container_width=True):
+                st.session_state["app_state"] = "simulator"
                 st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.markdown("### 💾 Exportar Reporte")
-        
-        report_text = f"REPORTE DE SIMULACIÓN - ROLPLAY.AI\n"
-        report_text += f"{'='*40}\n"
-        report_text += f"Nombre: {st.session_state.get('user_name', '') or 'No especificado'}\n"
-        report_text += f"Empresa: {st.session_state.get('company_name', '') or 'No especificada'}\n"
-        report_text += f"Área: {selected_area}\n"
-        report_text += f"Nivel: {scenario_name}\n"
-        report_text += f"{'-'*40}\n"
-        report_text += f"Puntaje Obtenido: {score}/100\n"
-        report_text += f"Estado: {'Aprobado' if passed else 'Reprobado'}\n\n"
-        report_text += f"FEEDBACK:\n{result.get('feedback', '')}\n\n"
-        report_text += f"RECOMENDACIÓN:\n{result.get('recommendation', '')}\n"
-        report_text += f"{'='*40}\n"
-
-        col_dl, col_mail, col_print = st.columns(3)
-        
-        with col_dl:
-            st.download_button(
-                label="Descargar Informe (.txt)",
-                data=report_text,
-                file_name=f"Reporte_{st.session_state.get('user_name', 'Simulacion').replace(' ', '_')}.txt",
-                mime="text/plain",
-                use_container_width=True
-            )
-            
-        with col_mail:
-            subject = urllib.parse.quote(f"Reporte de Simulación - {st.session_state.get('user_name', 'RolPlay.ai')}")
-            body = urllib.parse.quote(report_text)
-            mailto_link = f"mailto:?subject={subject}&body={body}"
-            st.markdown(f'<a href="{mailto_link}" target="_blank" style="text-decoration:none;"><button style="width:100%; border:1px solid #ccc; border-radius:8px; padding:0.5rem; background-color:transparent; color:inherit; text-align:center;">📧 Enviar por Mail</button></a>', unsafe_allow_html=True)
-            
-        with col_print:
-            components.html(
-                """
-                <button onclick="window.parent.print()" style="width:100%; border:1px solid #ccc; border-radius:8px; padding:0.5rem; background-color:transparent; color:#FAFAFA; text-align:center; cursor:pointer;" onMouseOver="this.style.backgroundColor='#333'" onMouseOut="this.style.backgroundColor='transparent'">
-                🖨️ Imprimir
-                </button>
-                """,
-                height=45
-            )
-
+elif st.session_state["app_state"] == "history":
+    st.markdown("<p class='main-header'>📜 Historial</p>", unsafe_allow_html=True)
+    history_data = get_history()
+    if not history_data:
+        st.warning("No hay sesiones guardadas aún.")
     else:
-        for msg in st.session_state["messages"]:
-            if msg["role"] != "system":
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
+        for row in history_data:
+            with st.expander(f"📅 {row[1]} | {row[4]} | Score: {row[6]}"):
+                st.write(f"**Usuario:** {row[2]}")
+                st.write(f"**Área:** {row[3]}")
+                st.write(f"**Feedback:** {row[7]}")
+                if st.button(f"Ver Chat Completo", key=f"hist_{row[0]}"):
+                    try:
+                        hist_msgs = json.loads(row[5])
+                        for m in hist_msgs:
+                            st.chat_message(m["role"]).write(m["content"])
+                    except Exception as e:
+                        st.error(f"Error al cargar el chat: El formato de datos no es válido.")
 
-        if prompt := st.chat_input("Escribe tu respuesta aquí para gestionar la situación..."):
+elif st.session_state["app_state"] == "simulator":
+    st.markdown('<p class="main-header">🎭 RolPlay.ai</p>', unsafe_allow_html=True)
+    
+    # Check if a scenario is selected (Safeguard)
+    current_area = list(SCENARIOS.keys())[0] if "selected_area" not in locals() else selected_area
+    current_scenario = list(SCENARIOS[current_area].keys())[0] if "scenario_name" not in locals() else scenario_name
+    
+    scenario_data = SCENARIOS[current_area][current_scenario]
+    scenario_greeting = scenario_data["greeting"]
+    user_name = st.session_state["user_profile"]["name"]
+    company = st.session_state["user_profile"]["company"]
+    
+    # Session state init
+    if "messages" not in st.session_state or st.session_state.get("last_scenario") != current_scenario:
+        st.session_state["messages"] = [{"role": "assistant", "content": scenario_greeting.replace("[USER]", user_name)}]
+        st.session_state["last_scenario"] = current_scenario
+        st.session_state["evaluation"] = None
+
+    # Evaluation Display
+    if st.session_state["evaluation"]:
+        eval_data = st.session_state["evaluation"]
+        st.markdown(f"""
+        <div style='background: rgba(16, 185, 129, 0.15); padding: 40px; border-radius: 30px; border: 1px solid rgba(16, 185, 129, 0.3); margin-bottom: 30px;'>
+            <h2 style='color: #10B981;'>Evaluación Final: {eval_data['score']}/100</h2>
+            <p style='color: #FFFFFF; font-size: 1.1rem;'><strong>Feedback:</strong> {eval_data['feedback']}</p>
+            <p style='color: #FFFFFF; font-size: 1.1rem;'><strong>Recomendación:</strong> {eval_data['recommendation']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Volver al Simulador"):
+            st.session_state["evaluation"] = None
+            st.rerun()
+    else:
+        # Chat Display
+        for i, msg in enumerate(st.session_state["messages"]):
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
+                if msg["role"] == "assistant":
+                    if st.button(f"🔊 Escuchar", key=f"tts_{i}"):
+                        st.markdown(get_tts_html(msg["content"]), unsafe_allow_html=True)
+
+        # Chat Input
+        if prompt := st.chat_input("Escribe tu respuesta..."):
             st.session_state["messages"].append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-                
-            ollama_messages = []
-            for msg in st.session_state["messages"]:
-                ollama_messages.append({"role": msg["role"], "content": msg["content"]})
-                
+            st.rerun()
+
+        # Agent Response Logic
+        if st.session_state["messages"][-1]["role"] == "user":
             with st.chat_message("assistant"):
-                try:
-                    stream = ollama.chat(
-                        model=OLLAMA_MODEL,
-                        messages=ollama_messages,
-                        stream=True,
-                    )
+                with st.spinner("IA analizando y respondiendo..."):
+                    chat_history = [{"role": "system", "content": f"Contexto: {scenario_data['prompt']}. Usuario: {user_name}, Empresa: {company}. Sé profesional y directo."}]
+                    chat_history.extend(st.session_state["messages"])
                     
-                    def generate():
-                         for chunk in stream:
-                              if 'message' in chunk and 'content' in chunk['message']:
-                                  yield chunk['message']['content']
-                              
-                    response = st.write_stream(generate())
+                    response = chat_with_ai(chat_history, scenario_data["prompt"])
+                    st.write(response)
                     st.session_state["messages"].append({"role": "assistant", "content": response})
-                except Exception as e:
-                    error_msg = f"Lo siento, hubo un error con Ollama (asegúrate de que el servicio esté corriendo y el modelo '{OLLAMA_MODEL}' esté descargado). Error: {str(e)}"
-                    st.error(error_msg)
-                    # Quitar el mensaje del usuario para poder reintentar
-                    st.session_state["messages"].pop()
+                    st.rerun()
 
         if len(st.session_state["messages"]) > 2:
-            st.markdown("---")
-            if st.button("Terminar Simulación y Evaluar 📝"):
-                with st.spinner("Analizando tu desempeño..."):
-                    feedback_data = generate_feedback_report(st.session_state["messages"], selected_area, scenario_name)
-                    st.session_state["evaluation_result"] = feedback_data
-                    # SAVE TO DB
-                    save_session(
-                        user_name=st.session_state.get("user_name", ""),
-                        company_name=st.session_state.get("company_name", ""),
-                        area=selected_area,
-                        scenario=scenario_name,
-                        score=feedback_data.get("score", 0),
-                        passed=feedback_data.get("passed", False),
-                        feedback=feedback_data.get("feedback", ""),
-                        recommendation=feedback_data.get("recommendation", "")
-                    )
+            st.divider()
+            if st.button("🏁 Finalizar y Evaluar Sesión", use_container_width=True):
+                with st.spinner("Generando evaluación experta..."):
+                    result = evaluate_session(st.session_state["messages"], current_area, current_scenario)
+                    st.session_state["evaluation"] = result
                     st.rerun()
-
-elif app_mode == "Dashboard Analítico":
-    st.title("📊 Dashboard Analítico")
-    
-    # Simple password protection
-    if "dash_auth" not in st.session_state:
-        st.session_state["dash_auth"] = False
-        
-    if not st.session_state["dash_auth"]:
-        st.warning("🔒 Esta sección está protegida.")
-        pwd = st.text_input("Ingresa la contraseña para ver las métricas:", type="password")
-        if st.button("Ingresar"):
-            if pwd == "admin123": # Hardcoded simple password
-                st.session_state["dash_auth"] = True
-                st.rerun()
-            else:
-                st.error("Contraseña incorrecta.")
-    else:
-        if st.button("Cerrar Sesión (Dashboard)"):
-            st.session_state["dash_auth"] = False
-            st.rerun()
-            
-        # Load data
-        try:
-            conn = sqlite3.connect(DB_NAME)
-            df = pd.read_sql_query("SELECT * FROM sessions ORDER BY timestamp DESC", conn)
-            conn.close()
-            
-            if df.empty:
-                st.info("Aún no hay datos de simulaciones. ¡Realiza una simulación primero!")
-            else:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Total Simulaciones", len(df))
-                with col2:
-                    avg_score = df["score"].mean()
-                    st.metric("Puntaje Promedio", f"{avg_score:.1f}/100")
-                with col3:
-                    pass_rate = (df["passed"].sum() / len(df)) * 100
-                    st.metric("Tasa de Aprobación", f"{pass_rate:.1f}%")
-                
-                st.markdown("### 📈 Desempeño por Área")
-                if not df.empty:
-                    area_scores = df.groupby("area")["score"].mean().reset_index()
-                    st.bar_chart(data=area_scores, x="area", y="score", height=300)
-                
-                st.markdown("### 🗂️ Historial Reciente")
-                st.dataframe(
-                    df[["timestamp", "user_name", "area", "score", "passed"]].head(20),
-                    use_container_width=True,
-                    hide_index=True
-                )
-                
-                # Full download of DB
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Descargar Datos Completos (.csv)",
-                    data=csv,
-                    file_name="rolplay_database_export.csv",
-                    mime="text/csv",
-                )
-        except Exception as e:
-            st.error(f"Error cargando los datos: {e}")
