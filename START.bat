@@ -2,7 +2,7 @@
 setlocal
 cd /d %~dp0
 echo ==========================================
-echo    ROLPLAY.AI v1.0 - LAUNCHER
+echo    ROLPLAY.AI v1.3 - LAUNCHER
 echo ==========================================
 
 rem Check for Python

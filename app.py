@@ -5,15 +5,20 @@ import base64
 import time
 from datetime import datetime
 from dotenv import load_dotenv
-import ollama
+from groq import Groq
 import io
 import asyncio
 import edge_tts
 from streamlit_lottie import st_lottie
 import requests
 
-# Import scenarios
-from scenarios import SCENARIOS
+import sys
+
+# Add src to path so Python always finds scenarios directly
+_src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+if _src_path not in sys.path:
+    sys.path.insert(0, _src_path)
+from scenarios import SCENARIOS  # noqa: E402
 import sqlite3
 
 # Load env variables
@@ -70,25 +75,36 @@ def get_history():
 
 init_db()
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+# Groq Configuration
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-# Localhost often fails on Windows, 127.0.0.1 is safer
-if "localhost" in OLLAMA_HOST:
-    OLLAMA_HOST = OLLAMA_HOST.replace("localhost", "127.0.0.1")
+# Initialize Groq client
+client = None
+if GROQ_API_KEY:
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+    except Exception as e:
+        st.error(f"Error al inicializar Groq: {e}")
 
-# Initialize Ollama client
-client = ollama.Client(host=OLLAMA_HOST)
+def get_available_models():
+    # Standard high-performance Groq models
+    return [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "mixtral-8x7b-32768",
+        "llama3-70b-8192",
+        "llama3-8b-8192"
+    ]
 
 # --- MAIN APP REGION ---
-st.set_page_config(page_title="RolPlay.ai v1.1 Premium", page_icon="🎭", layout="wide")
+st.set_page_config(page_title="RolPlay.ai v1.6 Academy", page_icon="🎓", layout="wide")
 
 # App State for Entrance Portal
 if "app_state" not in st.session_state:
     st.session_state["app_state"] = "portal" 
 
 if "user_profile" not in st.session_state:
-    st.session_state["user_profile"] = {"name": "Usuario", "company": "RolPlay Corp"}
+    st.session_state["user_profile"] = {"name": "Usuario", "company": "RolPlay Academy"}
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -97,18 +113,48 @@ with st.sidebar:
     st.session_state["user_profile"]["company"] = st.text_input("Empresa/Organización", st.session_state["user_profile"]["company"])
     
     st.divider()
+    st.markdown("<h2 style='color: #818CF8;'>🧠 Cerebro IA</h2>", unsafe_allow_html=True)
+    
+    # Model Selection
+    available_models = get_available_models()
+    default_index = 0
+    if "selected_model" in st.session_state and st.session_state["selected_model"] in available_models:
+        default_index = available_models.index(st.session_state["selected_model"])
+    elif "llama-3.3-70b-versatile" in available_models:
+        default_index = available_models.index("llama-3.3-70b-versatile")
+    
+    selected_model = st.selectbox("Selecciona Versión", available_models, index=default_index)
+    st.session_state["selected_model"] = selected_model
+
+    # API Key Input
+    if not GROQ_API_KEY:
+        st.warning("⚠️ Falta la API Key de Groq")
+        new_key = st.text_input("Ingresa tu Groq API Key:", type="password")
+        if st.button("Guardar Key"):
+            with open(".env", "a") as f:
+                f.write(f"\nGROQ_API_KEY={new_key}")
+            st.success("¡Key guardada! Reinicia la app.")
+            st.rerun()
+    
+    if st.button("🔄 Refrescar Lista"):
+        st.rerun()
+    
+    st.divider()
     
     # Navigation logic with state check
-    curr_nav = ["Inicio", "Simulador", "Historial"]
+    curr_nav = ["Inicio", "Simulador", "Academia", "Historial"]
     idx = 0
     if st.session_state["app_state"] == "simulator": idx = 1
-    elif st.session_state["app_state"] == "history": idx = 2
+    elif st.session_state["app_state"] == "academy": idx = 2
+    elif st.session_state["app_state"] == "history": idx = 3
     
     nav = st.radio("Navegación", curr_nav, index=idx)
     if nav == "Inicio":
         st.session_state["app_state"] = "portal"
     elif nav == "Simulador":
         st.session_state["app_state"] = "simulator"
+    elif nav == "Academia":
+        st.session_state["app_state"] = "academy"
     else:
         st.session_state["app_state"] = "history"
 
@@ -138,13 +184,23 @@ st.markdown("""
     }
     
     .main-header {
-        background: linear-gradient(135deg, #818CF8 0%, #C084FC 100%);
+        background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 50%, #94A3B8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-weight: 800;
-        font-size: 3.5rem;
-        margin-bottom: -10px;
-        letter-spacing: -0.02em;
+        font-weight: 200 !important;
+        font-size: 6rem !important;
+        margin-bottom: 30px !important;
+        letter-spacing: -0.05em !important;
+        animation: etherealFade 2.5s ease-out forwards;
+        text-shadow: 0 10px 40px rgba(148, 163, 184, 0.15);
+        text-align: center;
+        width: 100%;
+        display: block;
+    }
+
+    @keyframes etherealFade {
+        0% { opacity: 0; transform: translateY(20px) scale(0.95); filter: blur(10px); }
+        100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
     }
     
     /* Sidebar Fixes */
@@ -198,17 +254,23 @@ st.markdown("""
         box-shadow: 0 10px 20px rgba(99, 102, 241, 0.2);
     }
 
-    .portal-container {
-        background: rgba(30, 41, 59, 0.6);
-        backdrop-filter: blur(25px);
-        border-radius: 40px;
-        padding: 80px 40px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        text-align: center;
-        margin: 40px auto;
-        max-width: 900px;
-        box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+    .academy-card {
+        background: rgba(30, 41, 59, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        padding: 25px;
+        transition: all 0.3s ease;
+        height: 100%;
     }
+    
+    .academy-card:hover {
+        border-color: #818CF8;
+        background: rgba(30, 41, 59, 0.6);
+        transform: translateY(-5px);
+    }
+
+
+
     
     .footer {
         position: fixed;
@@ -225,7 +287,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="footer">© 2026 RolPlay.ai Premium | Inteligencia Local Gemma 3</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer">© 2026 RolPlay.ai v1.6 Academy | Cloud AI Groq</div>', unsafe_allow_html=True)
 
 # --- CORE LOGIC ---
 
@@ -244,8 +306,12 @@ def get_tts_html(text):
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        audio_bytes = loop.run_until_complete(generate_edge_tts(text))
-        if not audio_bytes: return ""
+        # Get audio bytes synchronously from the async function
+        result = loop.run_until_complete(generate_edge_tts(text))
+        if not result or not isinstance(result, (bytes, bytearray)):
+            return ""
+        
+        audio_bytes: bytes = result
         b64 = base64.b64encode(audio_bytes).decode()
         return f"""
             <audio autoplay="true">
@@ -256,15 +322,21 @@ def get_tts_html(text):
         return f"<!-- TTS Error: {e} -->"
 
 def chat_with_ai(messages, sys_prompt):
+    if not client:
+        return "❌ Error: Configura tu API Key de Groq en el panel lateral."
     try:
-        response = client.chat(
-            model=OLLAMA_MODEL,
-            messages=messages
+        model_to_use = st.session_state.get("selected_model", "performance")
+        if model_to_use == "performance": # Handle old state or default
+            model_to_use = "llama-3.3-70b-versatile"
+            
+        completion = client.chat.completions.create(
+            model=model_to_use,
+            messages=messages,
         )
-        return response['message']['content']
+        return completion.choices[0].message.content
     except Exception as e:
-        st.error(f"⚠️ Error de conexión con Ollama: {str(e)}")
-        return f"❌ Error de Ollama: No se pudo contactar con el modelo. Verifica que Ollama esté abierto."
+        st.error(f"⚠️ Error de conexión con Groq: {str(e)}")
+        return f"❌ Error de Nube: No se pudo contactar con Groq. Verifica tu conexión e Internet."
 
 def evaluate_session(messages, area, scenario):
     user_name = st.session_state["user_profile"]["name"]
@@ -285,12 +357,15 @@ def evaluate_session(messages, area, scenario):
             eval_messages.append(m)
             
     try:
-        response = client.chat(
-            model=OLLAMA_MODEL,
+        if not client:
+            return {"score": 0, "feedback": "Configura tu API Key de Groq.", "passed": False, "recommendation": "Reintentar."}
+        model_to_use = "llama-3.1-8b-instant" # Fast model for evaluation
+        completion = client.chat.completions.create(
+            model=model_to_use,
             messages=eval_messages,
-            format="json"
+            response_format={"type": "json_object"}
         )
-        result = json.loads(response['message']['content'])
+        result = json.loads(completion.choices[0].message.content)
         save_session(user_name, area, scenario, messages, result["score"], result["feedback"])
         return result
     except Exception as e:
@@ -299,10 +374,11 @@ def evaluate_session(messages, area, scenario):
 # --- UI LOGIC ---
 
 if st.session_state["app_state"] == "portal":
-    st.markdown("<p class='main-header' style='text-align: center;'>🎭 RolPlay.ai</p>", unsafe_allow_html=True)
+    st.markdown("<div class='main-header'>🎭 RolPlay.ai</div>", unsafe_allow_html=True)
     
     with st.container():
-        st.markdown("<div class='portal-container'>", unsafe_allow_html=True)
+        # Centralizing content manually since container is gone
+        st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if lottie_ai:
@@ -316,7 +392,6 @@ if st.session_state["app_state"] == "portal":
             if st.button("🚀 COMENZAR ENTRENAMIENTO", use_container_width=True):
                 st.session_state["app_state"] = "simulator"
                 st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state["app_state"] == "history":
     st.markdown("<p class='main-header'>📜 Historial</p>", unsafe_allow_html=True)
@@ -337,8 +412,191 @@ elif st.session_state["app_state"] == "history":
                     except Exception as e:
                         st.error(f"Error al cargar el chat: El formato de datos no es válido.")
 
+elif st.session_state["app_state"] == "academy":
+    st.markdown("<div class='main-header'>🎓 Academia</div>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 1.2rem; color: #94A3B8;'>Recursos 100% gratuitos para dominar las habilidades más poderosas. Todo con un click.</p>", unsafe_allow_html=True)
+
+    tabs = st.tabs(["🌟 Nivel 1: Conexión", "💼 Nivel 2: Negociación", "👑 Nivel 3: Liderazgo"])
+
+    # ─── NIVEL 1 ───────────────────────────────────────────────────────────────
+    with tabs[0]:
+        st.markdown("### 🌟 El Arte de la Conexión Humana")
+        st.markdown("<p style='color:#94A3B8;'>Aprende a construir relaciones auténticas, desarrollar empatía real y que las personas quieran estar contigo.</p>", unsafe_allow_html=True)
+        st.markdown("---")
+
+        st.markdown("#### 📺 Videos Gratuitos en YouTube")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Empatía vs Simpatía</h4>
+            <p><strong>Brené Brown – RSA Animate</strong></p>
+            <p><small>⏱ 3 min · El video más viral sobre empatía real. Cambia tu forma de conectar con las personas para siempre.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=1Evwgu369Jw", use_container_width=True)
+
+        with col2:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Cómo Conectar con Cualquier Persona</h4>
+            <p><strong>Daniel Colombo – Curso Gratis Empatía</strong></p>
+            <p><small>⏱ 20 min · 5 claves probadas para desarrollar empatía real y conectar genuinamente con cualquier persona.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=eIho2S0ZahI", use_container_width=True)
+
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Cómo Hablar para que te Escuchen</h4>
+            <p><strong>Julian Treasure – TED Talk</strong></p>
+            <p><small>⏱ 10 min · Técnicas poderosas de voz y comunicación. Millones de vistas. El mejor TED Talk sobre hablar en público.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=eIho2S0ZahI", use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 📚 Libros Gratuitos (Google Books / Archive.org)")
+
+        col5, col6 = st.columns(2)
+        with col5:
+            st.markdown("""<div class='academy-card'>
+            <h4>📖 Inteligencia Emocional</h4>
+            <p><strong>Daniel Goleman</strong></p>
+            <p><small>El libro que cambió el mundo. Por qué el CI no lo es todo y cómo dominar tus emociones. Disponible gratis en Archive.org.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("📖 Leer Gratis en Archive.org", "https://archive.org/search?query=inteligencia+emocional+goleman+español", use_container_width=True)
+
+        with col6:
+            st.markdown("""<div class='academy-card'>
+            <h4>📖 Cómo Ganar Amigos</h4>
+            <p><strong>Dale Carnegie</strong></p>
+            <p><small>El libro de habilidades sociales más vendido de la historia. Previsualización gratuita en Google Books.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("📖 Ver en Google Books (GRATIS)", "https://books.google.com/books?q=como+ganar+amigos+dale+carnegie+español", use_container_width=True)
+
+        st.markdown("---")
+        if st.button("🚀 PRACTICAR EMPATÍA AHORA (Escenario: Atención al Cliente)", use_container_width=True):
+            st.session_state["area_select"] = "Servicio al Cliente"
+            st.session_state["app_state"] = "simulator"
+            st.rerun()
+
+    # ─── NIVEL 2 ───────────────────────────────────────────────────────────────
+    with tabs[1]:
+        st.markdown("### 💼 Dominio de la Negociación e Influencia")
+        st.markdown("<p style='color:#94A3B8;'>Aprende las técnicas que usan los negociadores del FBI, Harvard y los mejores vendedores del mundo.</p>", unsafe_allow_html=True)
+        st.markdown("---")
+
+        st.markdown("#### 📺 Videos Gratuitos en YouTube")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 MasterClass en Vivo: Chris Voss</h4>
+            <p><strong>Técnicas reales del FBI</strong></p>
+            <p><small>⏱ 45 min · El exnegociador del FBI enseña mirroring, labeling y empatía táctica. El mejor recurso gratis de negociación.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=guZa7mT1MHQ", use_container_width=True)
+
+        with col2:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Los 3 Tipos de Negociador (Chris Voss)</h4>
+            <p><strong>Analista, Acomodador, Asertivo</strong></p>
+            <p><small>⏱ 15 min · Identifica tu estilo y el de tu contraparte para negociar con ventaja total en cualquier situación.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=MqO9WjeMmvg", use_container_width=True)
+
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Resumen: Rompe la Barrera del No</h4>
+            <p><strong>Never Split the Difference – Animado</strong></p>
+            <p><small>⏱ 12 min · Los conceptos clave del libro de Chris Voss explicados de forma visual. Ideal para empezar ya.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/results?search_query=rompe+la+barrera+del+no+chris+voss+resumen", use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 📚 Libros Gratuitos (Google Books / Archive.org)")
+
+        col5, col6 = st.columns(2)
+        with col5:
+            st.markdown("""<div class='academy-card'>
+            <h4>📖 Consiga el Sí (Getting to Yes)</h4>
+            <p><strong>Fisher & Ury – Harvard</strong></p>
+            <p><small>El método de negociación de Harvard. Disponible en Archive.org con lectura gratuita online.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("📖 Leer Gratis en Archive.org", "https://archive.org/search?query=getting+to+yes+fisher+negotiation", use_container_width=True)
+
+        with col6:
+            st.markdown("""<div class='academy-card'>
+            <h4>📖 Influence – Psicología de la Persuasión</h4>
+            <p><strong>Robert Cialdini</strong></p>
+            <p><small>Los 6 principios universales de la influencia. Previsualización gratuita en Google Books.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("📖 Ver en Google Books (GRATIS)", "https://books.google.com/books?q=influence+cialdini+persuasion", use_container_width=True)
+
+        st.markdown("---")
+        if st.button("🚀 PRACTICAR NEGOCIACIÓN AHORA (Escenario: Ventas)", use_container_width=True):
+            st.session_state["area_select"] = "Ventas y Negociación"
+            st.session_state["app_state"] = "simulator"
+            st.rerun()
+
+    # ─── NIVEL 3 ───────────────────────────────────────────────────────────────
+    with tabs[2]:
+        st.markdown("### 👑 Liderazgo de Alto Impacto")
+        st.markdown("<p style='color:#94A3B8;'>Aprende de Navy SEALs, líderes de Silicon Valley y los mejores TED Talks de liderazgo del mundo.</p>", unsafe_allow_html=True)
+        st.markdown("---")
+
+        st.markdown("#### 📺 Videos Gratuitos en YouTube")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Cómo los Grandes Líderes Inspiran Acción</h4>
+            <p><strong>Simon Sinek – TED Talk (El Círculo Dorado)</strong></p>
+            <p><small>⏱ 18 min · El TED Talk más visto sobre liderazgo. Aprende el WHY que separa a los líderes legendarios del resto.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=qp0HIF3SfI4", use_container_width=True)
+
+        with col2:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Por qué los Buenos Líderes te Hacen Sentir Seguro</h4>
+            <p><strong>Simon Sinek – TED Talk</strong></p>
+            <p><small>⏱ 12 min · La ciencia detrás de la confianza y los equipos de alto rendimiento. Cambio de mentalidad total.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=lmyZMtPVodo", use_container_width=True)
+
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown("""<div class='academy-card'>
+            <h4>🎬 Extreme Ownership – Jocko Willink</h4>
+            <p><strong>Principios de los Navy SEALs</strong></p>
+            <p><small>⏱ 20 min · Responsabilidad total, sin excusas. Los principios de liderazgo más duros y efectivos del mundo.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/results?search_query=jocko+willink+extreme+ownership+español", use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 📚 Libros Gratuitos (Google Books / Archive.org)")
+
+        col5, col6 = st.columns(2)
+        with col5:
+            st.markdown("""<div class='academy-card'>
+            <h4>📖 Liderazgo – Harvard Business Review</h4>
+            <p><strong>Colección HBR (Archive.org)</strong></p>
+            <p><small>La colección de artículos de liderazgo más influyente del mundo. Lectura gratuita online en Archive.org.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("📖 Leer Gratis en Archive.org", "https://archive.org/search?query=liderazgo+harvard+business+review+español", use_container_width=True)
+
+        with col6:
+            st.markdown("""<div class='academy-card'>
+            <h4>📖 Liderazgo – Lo que todo Líder Necesita</h4>
+            <p><strong>John C. Maxwell</strong></p>
+            <p><small>El autor de liderazgo más leído del mundo. Previsualización gratuita extensa en Google Books.</small></p>
+            </div>""", unsafe_allow_html=True)
+            st.link_button("📖 Ver en Google Books (GRATIS)", "https://books.google.com/books?q=liderazgo+maxwell+lo+que+todo+lider+necesita", use_container_width=True)
+
+        st.markdown("---")
+        if st.button("🚀 PRACTICAR LIDERAZGO AHORA (Escenario: Gestión de Crisis)", use_container_width=True):
+            st.session_state["area_select"] = "Liderazgo"
+            st.session_state["app_state"] = "simulator"
+            st.rerun()
+
 elif st.session_state["app_state"] == "simulator":
-    st.markdown('<p class="main-header">🎭 RolPlay.ai</p>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">🎭 RolPlay.ai</div>', unsafe_allow_html=True)
     
     # Check if a scenario is selected (Safeguard)
     selected_area = st.session_state.get("area_select", list(SCENARIOS.keys())[0])
