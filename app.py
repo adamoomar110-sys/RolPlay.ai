@@ -71,7 +71,7 @@ def get_history():
 init_db()
 
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
 # Initialize Ollama client
 client = ollama.Client(host=OLLAMA_HOST)
