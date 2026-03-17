@@ -71,6 +71,10 @@ def get_history():
 init_db()
 
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+
+# Initialize Ollama client
+client = ollama.Client(host=OLLAMA_HOST)
 
 # --- MAIN APP REGION ---
 st.set_page_config(page_title="RolPlay.ai v1.1 Premium", page_icon="🎭", layout="wide")
@@ -249,7 +253,7 @@ def get_tts_html(text):
 
 def chat_with_ai(messages, sys_prompt):
     try:
-        response = ollama.chat(
+        response = client.chat(
             model=OLLAMA_MODEL,
             messages=messages
         )
@@ -276,7 +280,7 @@ def evaluate_session(messages, area, scenario):
             eval_messages.append(m)
             
     try:
-        response = ollama.chat(
+        response = client.chat(
             model=OLLAMA_MODEL,
             messages=eval_messages,
             format="json"
