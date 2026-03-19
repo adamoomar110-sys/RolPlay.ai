@@ -97,7 +97,7 @@ def get_available_models():
     ]
 
 # --- MAIN APP REGION ---
-st.set_page_config(page_title="RolPlay.ai v1.6 Academy", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="RolPlay.ai v1.6 Academy", page_icon="assets/logo.png", layout="wide")
 
 # App State for Entrance Portal
 if "app_state" not in st.session_state:
