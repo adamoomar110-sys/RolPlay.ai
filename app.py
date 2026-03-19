@@ -189,7 +189,7 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         font-weight: 200 !important;
         font-size: 6rem !important;
-        margin-bottom: 30px !important;
+        margin-bottom: 10px !important;
         letter-spacing: -0.05em !important;
         animation: etherealFade 2.5s ease-out forwards;
         text-shadow: 0 10px 40px rgba(148, 163, 184, 0.15);
@@ -389,7 +389,7 @@ if st.session_state["app_state"] == "portal":
     
     with st.container():
         # Centralizing content manually since container is gone
-        st.markdown("<div style='margin-top: 50px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if lottie_ai:
