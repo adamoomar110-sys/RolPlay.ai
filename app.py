@@ -389,13 +389,13 @@ if st.session_state["app_state"] == "portal":
     
     with st.container():
         # Centralizing content manually since container is gone
-        st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+        # Removed spacer div
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if lottie_ai:
-                st_lottie(lottie_ai, height=350, key="portal_ai")
+                st_lottie(lottie_ai, height=280, key="portal_ai")
         
-        st.markdown("<h1 style='font-size: 3.5rem; color: #FFFFFF;'>Simulador de Rol Premium</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 3rem; color: #FFFFFF; margin-top: -40px;'>Simulador de Rol Premium</h1>", unsafe_allow_html=True)
         st.markdown("<p style='font-size: 1.4rem; color: #CBD5E1; margin-bottom: 30px;'>Entrena tus habilidades con el cerebro de IA más avanzado del momento.</p>", unsafe_allow_html=True)
         
         col_b1, col_b2, col_b3 = st.columns([1, 1.5, 1])
