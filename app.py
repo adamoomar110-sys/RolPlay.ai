@@ -205,8 +205,8 @@ st.markdown("""
     
     /* Sidebar Fixes */
     [data-testid="stSidebar"] {
-        background-color: rgba(15, 23, 42, 0.95) !important;
-        backdrop-filter: blur(15px);
+        background-color: rgba(15, 23, 42, 0.98) !important;
+        backdrop-filter: blur(20px);
         border-right: 1px solid rgba(255,255,255,0.1);
     }
 
@@ -214,9 +214,20 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    [data-testid="stSidebar"] .stTextInput input {
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    /* Style for ALL Sidebar Inputs: Text, Selectbox, and Data views */
+    [data-testid="stSidebar"] div[data-baseweb="input"], 
+    [data-testid="stSidebar"] div[data-baseweb="select"] {
+        background-color: rgba(30, 41, 59, 1) !important;
+        border-radius: 10px !important;
+    }
+
+    [data-testid="stSidebar"] input {
+        color: #FFFFFF !important;
+        background-color: #1E293B !important;
+    }
+    
+    [data-testid="stSidebar"] .stSelectbox div[role="button"] {
+        background-color: #1E293B !important;
         color: #FFFFFF !important;
     }
     
