@@ -429,27 +429,27 @@ elif st.session_state["app_state"] == "academy":
         with col1:
             st.markdown("""<div class='academy-card'>
             <h4>🎬 Empatía vs Simpatía</h4>
-            <p><strong>Brené Brown – RSA Animate</strong></p>
-            <p><small>⏱ 3 min · El video más viral sobre empatía real. Cambia tu forma de conectar con las personas para siempre.</small></p>
+            <p><strong>Brené Brown (Español)</strong></p>
+            <p><small>⏱ 3 min · El corto animado más famoso sobre empatía, ahora con subtítulos oficiales en castellano.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=1Evwgu369Jw", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Subtítulos)", "https://www.youtube.com/watch?v=1Evwgu369Jw", use_container_width=True)
 
         with col2:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 Cómo Conectar con Cualquier Persona</h4>
-            <p><strong>Daniel Colombo – Curso Gratis Empatía</strong></p>
-            <p><small>⏱ 20 min · 5 claves probadas para desarrollar empatía real y conectar genuinamente con cualquier persona.</small></p>
+            <h4>🎬 Cómo Ganar Amigos (Resumen)</h4>
+            <p><strong>Principios de Dale Carnegie</strong></p>
+            <p><small>⏱ 15 min · Las reglas de oro para caerle bien a los demás y ganar su confianza de inmediato.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=eIho2S0ZahI", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Castellano)", "https://www.youtube.com/watch?v=P_IEnO1s_os", use_container_width=True)
 
         col3, col4 = st.columns(2)
         with col3:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 Cómo Hablar para que te Escuchen</h4>
-            <p><strong>Julian Treasure – TED Talk</strong></p>
-            <p><small>⏱ 10 min · Técnicas poderosas de voz y comunicación. Millones de vistas. El mejor TED Talk sobre hablar en público.</small></p>
+            <h4>🎬 Cómo Hablar para ser Escuchado</h4>
+            <p><strong>Julian Treasure (TED Talk)</strong></p>
+            <p><small>⏱ 10 min · La técnica de los "4 pilares" para que tus mensajes lleguen con fuerza. Con subtítulos en español.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=eIho2S0ZahI", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Subtítulos)", "https://www.youtube.com/watch?v=eIho2S0ZahI", use_container_width=True)
 
         st.markdown("---")
         st.markdown("#### 📚 Libros Gratuitos (Google Books / Archive.org)")
@@ -487,28 +487,28 @@ elif st.session_state["app_state"] == "academy":
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 MasterClass en Vivo: Chris Voss</h4>
-            <p><strong>Técnicas reales del FBI</strong></p>
-            <p><small>⏱ 45 min · El exnegociador del FBI enseña mirroring, labeling y empatía táctica. El mejor recurso gratis de negociación.</small></p>
+            <h4>🎬 El Arte de la Negociación</h4>
+            <p><strong>Chris Voss (Estrategias en Español)</strong></p>
+            <p><small>⏱ 20 min · Los mejores consejos del negociador estrella del FBI explicados detalladamente en castellano.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=guZa7mT1MHQ", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Doblado)", "https://www.youtube.com/watch?v=guZa7mT1MHQ", use_container_width=True)
 
         with col2:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 Los 3 Tipos de Negociador (Chris Voss)</h4>
-            <p><strong>Analista, Acomodador, Asertivo</strong></p>
-            <p><small>⏱ 15 min · Identifica tu estilo y el de tu contraparte para negociar con ventaja total en cualquier situación.</small></p>
+            <h4>🎬 Trucos Psicológicos de Chris Voss</h4>
+            <p><strong>Mirroring y Etiquetado</strong></p>
+            <p><small>⏱ 15 min · Cómo usar las palabras de tu contraparte para que te den lo que quieres sin pelear.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=MqO9WjeMmvg", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Castellano)", "https://www.youtube.com/watch?v=MqO9WjeMmvg", use_container_width=True)
 
         col3, col4 = st.columns(2)
         with col3:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 Resumen: Rompe la Barrera del No</h4>
-            <p><strong>Never Split the Difference – Animado</strong></p>
-            <p><small>⏱ 12 min · Los conceptos clave del libro de Chris Voss explicados de forma visual. Ideal para empezar ya.</small></p>
+            <h4>🎬 Rompe la Barrera del No (Resumen)</h4>
+            <p><strong>Libro Animado en Español</strong></p>
+            <p><small>⏱ 12 min · Visualiza las tácticas más potentes del libro para empezar a negociar hoy mismo.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/results?search_query=rompe+la+barrera+del+no+chris+voss+resumen", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Castellano)", "https://www.youtube.com/watch?v=f2w8U2O7e7I", use_container_width=True)
 
         st.markdown("---")
         st.markdown("#### 📚 Libros Gratuitos (Google Books / Archive.org)")
@@ -546,28 +546,28 @@ elif st.session_state["app_state"] == "academy":
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 Cómo los Grandes Líderes Inspiran Acción</h4>
-            <p><strong>Simon Sinek – TED Talk (El Círculo Dorado)</strong></p>
-            <p><small>⏱ 18 min · El TED Talk más visto sobre liderazgo. Aprende el WHY que separa a los líderes legendarios del resto.</small></p>
+            <h4>🎬 El Círculo Dorado</h4>
+            <p><strong>Simon Sinek (TED con Subtítulos)</strong></p>
+            <p><small>⏱ 18 min · El video de liderazgo más visto. Aprende el secreto de los líderes que inspiran acción.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=qp0HIF3SfI4", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Castellano)", "https://www.youtube.com/watch?v=qp0HIF3SfI4", use_container_width=True)
 
         with col2:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 Por qué los Buenos Líderes te Hacen Sentir Seguro</h4>
-            <p><strong>Simon Sinek – TED Talk</strong></p>
-            <p><small>⏱ 12 min · La ciencia detrás de la confianza y los equipos de alto rendimiento. Cambio de mentalidad total.</small></p>
+            <h4>🎬 Seguridad y Liderazgo</h4>
+            <p><strong>Simon Sinek (Español)</strong></p>
+            <p><small>⏱ 12 min · Por qué los grandes líderes te hacen sentir seguro y cómo eso crea equipos invencibles.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/watch?v=lmyZMtPVodo", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Subtítulos)", "https://www.youtube.com/watch?v=lmyZMtPVodo", use_container_width=True)
 
         col3, col4 = st.columns(2)
         with col3:
             st.markdown("""<div class='academy-card'>
-            <h4>🎬 Extreme Ownership – Jocko Willink</h4>
-            <p><strong>Principios de los Navy SEALs</strong></p>
-            <p><small>⏱ 20 min · Responsabilidad total, sin excusas. Los principios de liderazgo más duros y efectivos del mundo.</small></p>
+            <h4>🎬 Liderazgo SEAL: Extreme Ownership</h4>
+            <p><strong>Jocko Willink (Principios en Español)</strong></p>
+            <p><small>⏱ 10 min · La disciplina y responsabilidad extrema de los Navy SEALs aplicadas al mundo real.</small></p>
             </div>""", unsafe_allow_html=True)
-            st.link_button("▶️ Ver en YouTube (GRATIS)", "https://www.youtube.com/results?search_query=jocko+willink+extreme+ownership+español", use_container_width=True)
+            st.link_button("▶️ Ver en YouTube (Castellano)", "https://www.youtube.com/watch?v=fHPrVpX7Lio", use_container_width=True)
 
         st.markdown("---")
         st.markdown("#### 📚 Libros Gratuitos (Google Books / Archive.org)")
