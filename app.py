@@ -87,13 +87,13 @@ if GROQ_API_KEY:
         st.error(f"Error al inicializar Groq: {e}")
 
 def get_available_models():
-    # Standard high-performance Groq models
+    # Modelos activos de alto rendimiento en Groq
     return [
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
-        "mixtral-8x7b-32768",
-        "llama3-70b-8192",
-        "llama3-8b-8192"
+        "deepseek-r1-distill-llama-70b",
+        "gemma2-9b-it",
+        "qwen-2.5-32b"
     ]
 
 # --- MAIN APP REGION ---
@@ -303,15 +303,19 @@ st.markdown('<div class="footer">© 2026 RolPlay.ai v1.6 Academy | Cloud AI Groq
 # --- CORE LOGIC ---
 
 async def generate_edge_tts(text, voice="es-AR-TomasNeural"):
-    try:
-        communicate = edge_tts.Communicate(text, voice)
-        audio_data = b""
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data += chunk["data"]
-        return audio_data
-    except:
-        return None
+    fallback_voices = [voice, "es-MX-JorgeNeural", "es-ES-AlvaroNeural"]
+    for v in fallback_voices:
+        try:
+            communicate = edge_tts.Communicate(text, v)
+            audio_data = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
+            if audio_data:
+                return audio_data
+        except Exception:
+            continue
+    return None
 
 def get_tts_html(text):
     try:
@@ -484,7 +488,7 @@ elif st.session_state["app_state"] == "academy":
 
         st.markdown("---")
         if st.button("🚀 PRACTICAR EMPATÍA AHORA (Escenario: Atención al Cliente)", use_container_width=True):
-            st.session_state["area_select"] = "Servicio al Cliente"
+            st.session_state["area_select"] = "Atención al Cliente"
             st.session_state["app_state"] = "simulator"
             st.rerun()
 
@@ -543,7 +547,7 @@ elif st.session_state["app_state"] == "academy":
 
         st.markdown("---")
         if st.button("🚀 PRACTICAR NEGOCIACIÓN AHORA (Escenario: Ventas)", use_container_width=True):
-            st.session_state["area_select"] = "Ventas y Negociación"
+            st.session_state["area_select"] = "Ventas B2B"
             st.session_state["app_state"] = "simulator"
             st.rerun()
 
@@ -601,8 +605,8 @@ elif st.session_state["app_state"] == "academy":
             st.link_button("📖 Ver en Google Books (GRATIS)", "https://books.google.com/books?q=liderazgo+maxwell+lo+que+todo+lider+necesita", use_container_width=True)
 
         st.markdown("---")
-        if st.button("🚀 PRACTICAR LIDERAZGO AHORA (Escenario: Gestión de Crisis)", use_container_width=True):
-            st.session_state["area_select"] = "Liderazgo"
+        if st.button("🚀 PRACTICAR LIDERAZGO AHORA (Escenario: Soporte IT y Liderazgo)", use_container_width=True):
+            st.session_state["area_select"] = "Soporte IT y Liderazgo"
             st.session_state["app_state"] = "simulator"
             st.rerun()
 
@@ -611,9 +615,17 @@ elif st.session_state["app_state"] == "simulator":
     
     # Check if a scenario is selected (Safeguard)
     selected_area = st.session_state.get("area_select", list(SCENARIOS.keys())[0])
-    scenario_name = st.session_state.get("scenario_select", list(SCENARIOS[selected_area].keys())[0])
+    if selected_area not in SCENARIOS:
+        selected_area = list(SCENARIOS.keys())[0]
+        st.session_state["area_select"] = selected_area
+
+    scenarios_area = SCENARIOS[selected_area]
+    scenario_name = st.session_state.get("scenario_select")
+    if not scenario_name or scenario_name not in scenarios_area:
+        scenario_name = list(scenarios_area.keys())[0]
+        st.session_state["scenario_select"] = scenario_name
     
-    scenario_data = SCENARIOS[selected_area][scenario_name]
+    scenario_data = scenarios_area[scenario_name]
     scenario_greeting = scenario_data["greeting"]
     user_name = st.session_state["user_profile"]["name"]
     company = st.session_state["user_profile"]["company"]

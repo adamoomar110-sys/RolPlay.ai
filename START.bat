@@ -2,7 +2,7 @@
 setlocal
 cd /d %~dp0
 echo ==========================================
-echo    ROLPLAY.AI v1.3 - LAUNCHER
+echo    ROLPLAY.AI v1.6 Academy - LAUNCHER
 echo ==========================================
 
 rem Check for Python
@@ -14,6 +14,6 @@ if %errorlevel% neq 0 (
 )
 
 echo [+] Iniciando Simulador (Streamlit)...
-streamlit run app.py --server.port 8002 --browser.gatherUsageStats false
+python -m streamlit run app.py --server.port 8002 --browser.gatherUsageStats false
 
 pause
