@@ -77,6 +77,12 @@ init_db()
 
 # Groq Configuration
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+if not GROQ_API_KEY:
+    try:
+        if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+            GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+    except Exception:
+        pass
 
 # Initialize Groq client
 client = None
@@ -85,6 +91,7 @@ if GROQ_API_KEY:
         client = Groq(api_key=GROQ_API_KEY)
     except Exception as e:
         st.error(f"Error al inicializar Groq: {e}")
+
 
 def get_available_models():
     # Modelos activos de alto rendimiento en Groq
@@ -169,6 +176,13 @@ with st.sidebar:
             st.session_state["messages"] = [{"role": "assistant", "content": scenario_data["greeting"]}]
             st.session_state["evaluation"] = None
             st.rerun()
+
+    st.markdown("""
+    <div style='text-align: center; color: #64748b; font-size: 0.75rem; padding-top: 25px;'>
+        © 2026 Aura · RolPlay.ai
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # --- CSS PREMIUM ---
 st.markdown("""
@@ -682,3 +696,11 @@ elif st.session_state["app_state"] == "simulator":
                     result = evaluate_session(st.session_state["messages"], selected_area, scenario_name)
                     st.session_state["evaluation"] = result
                     st.rerun()
+
+    # --- FOOTER AURA ---
+    st.markdown("""
+    <div style='text-align: center; color: #64748b; font-size: 0.85rem; padding: 30px 0 10px 0; margin-top: 40px; border-top: 1px solid rgba(255, 255, 255, 0.08);'>
+        © 2026 Aura · RolPlay.ai Academy. Todos los derechos reservados.
+    </div>
+    """, unsafe_allow_html=True)
+
