@@ -27,16 +27,23 @@ load_dotenv()
 DB_PATH = "rolplay_history.db"
 
 @st.cache_data
-def load_lottieurl(url):
+def load_lottie_data():
+    local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "intro_lottie.json")
+    if os.path.exists(local_path):
+        try:
+            with open(local_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
     try:
-        r = requests.get(url)
-        if r.status_code != 200:
-            return None
-        return r.json()
-    except:
-        return None
+        r = requests.get("https://assets10.lottiefiles.com/packages/lf20_49rdyysj.json", timeout=4)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return None
 
-lottie_ai = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_49rdyysj.json")
+lottie_ai = load_lottie_data()
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -149,14 +156,14 @@ with st.sidebar:
     st.divider()
     
     # Navigation logic with state check
-    curr_nav = ["Inicio", "Simulador", "Academia", "Historial"]
+    curr_nav = ["Inicio / Intro", "Simulador", "Academia", "Historial"]
     idx = 0
     if st.session_state["app_state"] == "simulator": idx = 1
     elif st.session_state["app_state"] == "academy": idx = 2
     elif st.session_state["app_state"] == "history": idx = 3
     
     nav = st.radio("Navegación", curr_nav, index=idx)
-    if nav == "Inicio":
+    if nav == "Inicio / Intro":
         st.session_state["app_state"] = "portal"
     elif nav == "Simulador":
         st.session_state["app_state"] = "simulator"
@@ -312,7 +319,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="footer">© 2026 RolPlay.ai v1.6 Academy | Cloud AI Groq</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer">© 2026 Aura · RolPlay.ai v1.6 Academy | Cloud AI Groq</div>', unsafe_allow_html=True)
 
 # --- CORE LOGIC ---
 
@@ -410,8 +417,28 @@ if st.session_state["app_state"] == "portal":
         # Removed spacer div
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
+            rendered = False
             if lottie_ai:
-                st_lottie(lottie_ai, height=280, key="portal_ai")
+                try:
+                    st_lottie(lottie_ai, height=280, key="portal_ai")
+                    rendered = True
+                except Exception:
+                    rendered = False
+            if not rendered:
+                st.markdown("""
+                <div style="display: flex; justify-content: center; align-items: center; padding: 20px 0;">
+                    <div style="width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle, rgba(99,102,241,0.35) 0%, rgba(168,85,247,0.1) 70%); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 50px rgba(99,102,241,0.5); border: 2px solid rgba(129, 140, 248, 0.4); animation: pulse 3s infinite ease-in-out;">
+                        <span style="font-size: 4rem;">🧠</span>
+                    </div>
+                </div>
+                <style>
+                @keyframes pulse {
+                    0% { transform: scale(0.96); box-shadow: 0 0 25px rgba(99,102,241,0.4); }
+                    50% { transform: scale(1.04); box-shadow: 0 0 55px rgba(168,85,247,0.6); }
+                    100% { transform: scale(0.96); box-shadow: 0 0 25px rgba(99,102,241,0.4); }
+                }
+                </style>
+                """, unsafe_allow_html=True)
         
         st.markdown("<h1 style='font-size: 3rem; color: #FFFFFF; margin-top: -40px; text-align: center; width: 100%;'>Simulador de Rol Premium</h1>", unsafe_allow_html=True)
         st.markdown("<p style='font-size: 1.4rem; color: #CBD5E1; margin-bottom: 30px; text-align: center; width: 100%;'>Entrena tus habilidades con el cerebro de IA más avanzado del momento.</p>", unsafe_allow_html=True)
